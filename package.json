@@ -1,0 +1,21 @@
+{
+  "name": "lifeboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Личный трекер-конфигуратор: финансы, тренировки, курение, покупки, врачи и свои трекеры",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "icons": "node scripts/gen-icons.mjs"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte": "^5.58.0",
+    "svelte-check": "^4.7.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8"
+  }
+}
