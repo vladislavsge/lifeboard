@@ -37,10 +37,19 @@ export function primaryField(t: Tracker): TrackerField | undefined {
   return t.fields.find((f) => f.type === 'number' || f.type === 'money' || f.type === 'duration' || f.type === 'rating');
 }
 
-/** для веса логичнее «последнее значение» за день, для воды/кофе — сумма */
+/** Единицы измерений, которые бессмысленно складывать за день */
+const LAST_UNITS = ['кг', 'см', 'мм рт. ст.', 'ммоль/л', 'уд/мин', '°C'];
+
+/** для веса и замеров логичнее «последнее значение» за день, для воды/кофе — сумма */
 export function aggregate(t: Tracker, f: TrackerField): 'sum' | 'last' | 'avg' {
   if (f.type === 'rating') return 'avg';
-  if (f.type === 'number' && (f.unit === 'кг' || f.unit === 'см' || /вес|weight|давлен|темп|пульс|рост|замер/i.test(f.label + t.name))) return 'last';
+  if (
+    f.type === 'number' &&
+    (LAST_UNITS.includes(f.unit ?? '') ||
+      /вес|weight|давлен|темп|пульс|рост|замер|глюкоз|сахар|пробег|одометр/i.test(f.label + t.name))
+  ) {
+    return 'last';
+  }
   return 'sum';
 }
 

@@ -2,6 +2,8 @@
   import { fade, fly } from 'svelte/transition';
   import { app, data } from './lib/store.svelte';
   import { router, ui, answerConfirm, hideToast } from './lib/nav.svelte';
+  import { auth, refresh } from './lib/auth.svelte';
+  import { start as startSync, stop as stopSync } from './lib/sync.svelte';
   import BottomNav from './components/BottomNav.svelte';
   import SheetHost from './components/SheetHost.svelte';
 
@@ -10,6 +12,8 @@
   import History from './pages/History.svelte';
   import Settings from './pages/Settings.svelte';
   import ModulesSettings from './pages/ModulesSettings.svelte';
+  import Auth from './pages/Auth.svelte';
+  import Account from './pages/Account.svelte';
   import NotFound from './pages/NotFound.svelte';
 
   import FinancePage from './modules/finance/FinancePage.svelte';
@@ -30,6 +34,18 @@
   import TrackerBuilder from './modules/custom/TrackerBuilder.svelte';
 
   const parts = $derived(router.path.split('/').filter(Boolean));
+
+  // есть ли на этом адресе сервер аккаунтов — спрашиваем один раз при запуске
+  $effect(() => {
+    if (auth.state === 'unknown') void refresh();
+  });
+
+  // синхронизацию включаем только когда данные уже загружены из IndexedDB,
+  // иначе на сервер уедут пустые коллекции
+  $effect(() => {
+    if (app.ready && auth.state === 'in') void startSync();
+    else if (auth.state !== 'in') stopSync();
+  });
   const [p0, p1, p2] = $derived([parts[0], parts[1], parts[2]]);
 
   // тема: авто / светлая / тёмная
@@ -62,6 +78,10 @@
       <History />
     {:else if p0 === 'settings' && !p1}
       <Settings />
+    {:else if p0 === 'auth'}
+      {#key p1}<Auth action={p1} token={p2} />{/key}
+    {:else if p0 === 'account'}
+      <Account />
     {:else if p0 === 'settings' && p1 === 'modules'}
       <ModulesSettings />
     {:else if p0 === 'settings' && p1 === 'tracker'}

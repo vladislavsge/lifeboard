@@ -1,0 +1,13 @@
+# ── Сборка статики ───────────────────────────────────────────────────
+FROM node:24-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# ── Раздача через Caddy (+ reverse proxy на /graphql) ────────────────
+FROM caddy:2-alpine
+COPY docker/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
+EXPOSE 80 443

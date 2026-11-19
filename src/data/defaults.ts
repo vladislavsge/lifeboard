@@ -122,6 +122,8 @@ export const FIELD_TYPES: { id: FieldType; name: string; hint: string }[] = [
 ];
 
 export interface TrackerPreset {
+  /** раздел в списке заготовок */
+  group: string;
   name: string;
   icon: string;
   color: string;
@@ -130,15 +132,13 @@ export interface TrackerPreset {
   goalMode?: 'min' | 'max';
 }
 
+// Цель считается по первому полю «число / деньги / длительность», а если таких
+// полей нет — по количеству записей за день. Длительность задаётся в минутах.
 export const TRACKER_PRESETS: TrackerPreset[] = [
-  { name: 'Вес', icon: '⚖️', color: '#06b6d4', fields: [{ label: 'Вес', type: 'number', unit: 'кг' }] },
+  /* ---------- Здоровье ---------- */
+  { group: 'Здоровье', name: 'Вес', icon: '⚖️', color: '#06b6d4', fields: [{ label: 'Вес', type: 'number', unit: 'кг' }] },
   {
-    name: 'Сон', icon: '😴', color: '#6366f1',
-    fields: [{ label: 'Длительность', type: 'duration' }, { label: 'Качество', type: 'rating' }],
-  },
-  { name: 'Вода', icon: '💧', color: '#3b82f6', fields: [{ label: 'Объём', type: 'number', unit: 'мл' }], goal: 2000, goalMode: 'min' },
-  {
-    name: 'Замеры тела', icon: '📏', color: '#14b8a6',
+    group: 'Здоровье', name: 'Замеры тела', icon: '📏', color: '#14b8a6',
     fields: [
       { label: 'Вес', type: 'number', unit: 'кг' },
       { label: 'Талия', type: 'number', unit: 'см' },
@@ -147,45 +147,147 @@ export const TRACKER_PRESETS: TrackerPreset[] = [
       { label: 'Бицепс', type: 'number', unit: 'см' },
     ],
   },
-  { name: 'Шаги', icon: '👣', color: '#22c55e', fields: [{ label: 'Шаги', type: 'number', unit: 'шагов' }], goal: 8000, goalMode: 'min' },
   {
-    name: 'Настроение', icon: '🙂', color: '#eab308',
+    group: 'Здоровье', name: 'Давление', icon: '🩺', color: '#ef4444',
+    fields: [
+      { label: 'Верхнее', type: 'number', unit: 'мм рт. ст.' },
+      { label: 'Нижнее', type: 'number', unit: 'мм рт. ст.' },
+      { label: 'Пульс', type: 'number', unit: 'уд/мин' },
+    ],
+  },
+  {
+    group: 'Здоровье', name: 'Сахар в крови', icon: '🩸', color: '#be123c',
+    fields: [
+      { label: 'Глюкоза', type: 'number', unit: 'ммоль/л' },
+      { label: 'Когда', type: 'select', options: ['Натощак', 'После еды', 'Перед сном'] },
+    ],
+  },
+  {
+    group: 'Здоровье', name: 'Сон', icon: '😴', color: '#6366f1',
+    fields: [{ label: 'Длительность', type: 'duration' }, { label: 'Качество', type: 'rating' }],
+    goal: 420,
+    goalMode: 'min',
+  },
+  {
+    group: 'Здоровье', name: 'Лекарства', icon: '💊', color: '#f43f5e',
+    fields: [{ label: 'Препарат', type: 'text' }, { label: 'Доза', type: 'text' }],
+    goal: 1,
+    goalMode: 'min',
+  },
+  {
+    group: 'Здоровье', name: 'Головная боль', icon: '🤕', color: '#a855f7',
+    fields: [
+      { label: 'Сила', type: 'rating' },
+      { label: 'Где', type: 'select', options: ['Виски', 'Затылок', 'Лоб', 'Вся голова'] },
+      { label: 'Выпил таблетку', type: 'checkbox' },
+    ],
+  },
+  {
+    group: 'Здоровье', name: 'Настроение', icon: '🙂', color: '#eab308',
     fields: [{ label: 'Настроение', type: 'rating' }, { label: 'Что повлияло', type: 'text' }],
   },
+
+  /* ---------- Привычки ---------- */
   {
-    name: 'Лекарства', icon: '💊', color: '#ef4444',
-    fields: [{ label: 'Препарат', type: 'text' }, { label: 'Доза', type: 'text' }],
+    group: 'Привычки', name: 'Привычка', icon: '✅', color: '#10b981',
+    fields: [{ label: 'Сделано', type: 'checkbox' }, { label: 'Заметка', type: 'text' }],
+    goal: 1,
+    goalMode: 'min',
   },
   {
-    name: 'Кофе', icon: '☕', color: '#a16207',
+    group: 'Привычки', name: 'Вода', icon: '💧', color: '#3b82f6',
+    fields: [{ label: 'Объём', type: 'number', unit: 'мл' }],
+    goal: 2000,
+    goalMode: 'min',
+  },
+  {
+    group: 'Привычки', name: 'Шаги', icon: '👣', color: '#22c55e',
+    fields: [{ label: 'Шаги', type: 'number', unit: 'шагов' }],
+    goal: 8000,
+    goalMode: 'min',
+  },
+  {
+    group: 'Привычки', name: 'Медитация', icon: '🧘', color: '#8b5cf6',
+    fields: [{ label: 'Длительность', type: 'duration' }],
+    goal: 10,
+    goalMode: 'min',
+  },
+  {
+    group: 'Привычки', name: 'Экранное время', icon: '📱', color: '#475569',
+    fields: [{ label: 'Время', type: 'duration' }],
+    goal: 120,
+    goalMode: 'max',
+  },
+  {
+    group: 'Привычки', name: 'Кофе', icon: '☕', color: '#a16207',
     fields: [{ label: 'Порций', type: 'number', unit: 'шт' }, { label: 'Цена', type: 'money' }],
     goal: 3,
     goalMode: 'max',
   },
   {
-    name: 'Алкоголь', icon: '🍺', color: '#f59e0b',
+    group: 'Привычки', name: 'Алкоголь', icon: '🍺', color: '#f59e0b',
     fields: [
       { label: 'Напиток', type: 'select', options: ['Пиво', 'Вино', 'Крепкое', 'Коктейль'] },
       { label: 'Порций', type: 'number', unit: 'шт' },
       { label: 'Цена', type: 'money' },
     ],
+    goal: 2,
+    goalMode: 'max',
+  },
+
+  /* ---------- Занятия ---------- */
+  {
+    group: 'Занятия', name: 'Чтение', icon: '📚', color: '#0d9488',
+    fields: [
+      { label: 'Книга', type: 'text' },
+      { label: 'Время', type: 'duration' },
+      { label: 'Страниц', type: 'number', unit: 'стр' },
+    ],
+    goal: 30,
+    goalMode: 'min',
   },
   {
-    name: 'Чтение', icon: '📚', color: '#14b8a6',
-    fields: [{ label: 'Книга', type: 'text' }, { label: 'Страниц', type: 'number', unit: 'стр' }, { label: 'Время', type: 'duration' }],
+    group: 'Занятия', name: 'Учёба', icon: '🎓', color: '#0ea5e9',
+    fields: [{ label: 'Предмет', type: 'text' }, { label: 'Время', type: 'duration' }],
+    goal: 30,
+    goalMode: 'min',
   },
   {
-    name: 'Авто', icon: '🚗', color: '#64748b',
+    group: 'Занятия', name: 'Уборка', icon: '🧹', color: '#84cc16',
+    fields: [
+      { label: 'Что', type: 'select', options: ['Пылесос', 'Стирка', 'Посуда', 'Ванная', 'Окна', 'Другое'] },
+      { label: 'Время', type: 'duration' },
+    ],
+  },
+  {
+    group: 'Занятия', name: 'Авто', icon: '🚗', color: '#64748b',
     fields: [
       { label: 'Что', type: 'select', options: ['Заправка', 'Мойка', 'Сервис', 'Парковка', 'Другое'] },
       { label: 'Пробег', type: 'number', unit: 'км' },
+      { label: 'Литры', type: 'number', unit: 'л' },
       { label: 'Сумма', type: 'money' },
     ],
   },
-  { name: 'Свой трекер', icon: '✨', color: '#7c5cff', fields: [{ label: 'Значение', type: 'number' }] },
+
+  /* ---------- Своё ---------- */
+  {
+    group: 'Своё', name: 'Свой трекер', icon: '✨', color: '#7c5cff',
+    fields: [{ label: 'Значение', type: 'number' }],
+  },
 ];
 
+/** Заготовки по разделам — в том же порядке, что в списке выше. */
+export const TRACKER_PRESET_GROUPS: { name: string; items: TrackerPreset[] }[] = TRACKER_PRESETS.reduce<
+  { name: string; items: TrackerPreset[] }[]
+>((groups, preset) => {
+  const last = groups[groups.length - 1];
+  if (last && last.name === preset.group) last.items.push(preset);
+  else groups.push({ name: preset.group, items: [preset] });
+  return groups;
+}, []);
+
 export const EMOJI_SUGGEST = [
-  '✨', '⭐', '🔥', '💧', '⚖️', '😴', '🙂', '💊', '☕', '🍺', '📚', '🚗', '🐶', '🌱', '🧘', '🎸',
-  '🎮', '💻', '🧹', '🧺', '💅', '💇', '🎯', '📈', '🍎', '🥗', '🚴', '🏃', '🛁', '🪥', '📞', '❤️',
+  '✨', '⭐', '🔥', '✅', '💧', '⚖️', '📏', '😴', '🙂', '🩺', '🩸', '💊', '🤕', '☕', '🍺', '📚',
+  '🎓', '🚗', '🐶', '🌱', '🧘', '🎸', '🎮', '💻', '📱', '🧹', '🧺', '💅', '💇', '🎯', '📈', '🍎',
+  '🥗', '🚴', '🏃', '🛁', '🪥', '📞', '❤️', '👣',
 ];

@@ -1,0 +1,51 @@
+# Dev: порты наружу, hot reload, Mailpit вместо настоящей почты.
+services:
+  mysql:
+    ports:
+      - '${MYSQL_PORT:-3306}:3306'
+
+  api:
+    # отдельное имя образа: dev и prod собираются из разных стадий Dockerfile,
+    # под одним именем они перетирали бы друг друга
+    image: lifeboard-api-dev
+    build:
+      target: dev
+    # volume с node_modules мог устареть после правки package.json — доустановим
+    command: sh -c "npm install --no-audit --no-fund && npx prisma generate && npm run dev"
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+    volumes:
+      - ./server:/app
+      # node_modules — в volume контейнера: нативные модули Linux не должны
+      # смешиваться с теми, что ставятся на хосте под Windows
+      - api-node-modules:/app/node_modules
+    ports:
+      - '${API_PORT:-4000}:4000'
+
+  web:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "[ -x node_modules/.bin/vite ] || npm ci; exec npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_DOCKER: '1'
+      VITE_API_PROXY: http://api:4000
+    volumes:
+      - ./:/app
+      - web-node-modules:/app/node_modules
+    ports:
+      # WEB_PORT должен совпадать с портом в APP_ORIGIN — иначе сервер
+      # отклонит запросы браузера как пришедшие с чужого origin
+      - '${WEB_PORT:-5173}:5173'
+    depends_on:
+      - api
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '8025:8025'
+
+volumes:
+  api-node-modules:
+  web-node-modules:

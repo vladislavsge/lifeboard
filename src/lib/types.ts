@@ -267,6 +267,16 @@ export interface ModuleSetting {
   enabled: boolean;
 }
 
+/** Какие уведомления присылать — у каждого типа свой тумблер */
+export interface NotifySettings {
+  goals: boolean;
+  recurring: boolean;
+  budgets: boolean;
+  events: boolean;
+  /** когда напоминать про незакрытые цели, «ЧЧ:ММ» */
+  goalAt: string;
+}
+
 export interface Settings {
   version: number;
   currency: string;
@@ -278,4 +288,5 @@ export interface Settings {
   lastSmokeProductId?: ID;
   lastBackupAt?: string;
   onboarded?: boolean;
+  notify?: NotifySettings;
 }

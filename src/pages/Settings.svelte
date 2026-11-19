@@ -3,6 +3,8 @@
   import { go, ask, toast } from '../lib/nav.svelte';
   import { download, nowLocal, setCurrency, fmtDateTime, todayKey } from '../lib/utils';
   import { pwa, install, isIOS } from '../lib/pwa.svelte';
+  import { auth } from '../lib/auth.svelte';
+  import { sync } from '../lib/sync.svelte';
   import { CURRENCIES } from '../data/defaults';
   import { exportCsv } from '../modules/finance/finance';
   import TopBar from '../components/TopBar.svelte';
@@ -43,6 +45,20 @@
     toast('Все данные удалены');
     go('/');
   }
+
+  const syncSub = $derived(
+    !sync.on
+      ? 'синхронизация выключена'
+      : sync.conflicts.length
+        ? 'нужно решить, чьи данные оставить'
+        : sync.status === 'syncing'
+          ? 'обмен данными…'
+          : sync.status === 'offline'
+            ? 'нет связи с сервером'
+            : sync.lastSyncAt
+              ? 'синхронизировано: ' + fmtDateTime(sync.lastSyncAt)
+              : 'синхронизация включена',
+  );
 
   function onCurrency(e: Event) {
     const v = (e.currentTarget as HTMLSelectElement).value;
@@ -167,6 +183,21 @@
     </div>
   {/if}
 
+  {#if auth.serverReachable || auth.state === 'in'}
+    <div class="section">
+      <div class="section-head"><h3>Аккаунт</h3></div>
+      <div class="list">
+        <button class="row" onclick={() => go(auth.state === 'in' ? '/account' : '/auth')}>
+          <div class="row-icon" style:--c="var(--blue)"><Icon name="card" size={18} /></div>
+          <div class="row-main">
+            <div class="row-title">{auth.state === 'in' ? (auth.me?.email ?? 'Аккаунт') : 'Войти или создать аккаунт'}</div>
+            <div class="row-sub">{auth.state === 'in' ? syncSub : 'синхронизация между устройствами'}</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  {/if}
+
   <div class="section">
     <div class="section-head"><h3>Данные</h3></div>
     <div class="list">
@@ -198,8 +229,13 @@
     </div>
     <input bind:this={fileInput} type="file" accept="application/json,.json" style="display:none" onchange={restore} />
     <p class="hint">
-      Все записи хранятся только в этом браузере на этом устройстве — никуда не отправляются. Периодически сохраняйте копию (например, в iCloud
-      / Google Drive), чтобы не потерять данные при очистке браузера.
+      {#if auth.state === 'in'}
+        Записи хранятся на этом устройстве и копируются в ваш аккаунт на сервере. Резервную копию файлом всё
+        равно полезно делать — она не зависит ни от браузера, ни от сервера.
+      {:else}
+        Все записи хранятся только в этом браузере на этом устройстве — никуда не отправляются. Периодически
+        сохраняйте копию (например, в iCloud / Google Drive), чтобы не потерять данные при очистке браузера.
+      {/if}
     </p>
   </div>
 

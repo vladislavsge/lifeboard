@@ -1,0 +1,51 @@
+# Фронт и API на одном домене: cookie работают без CORS и без SameSite=None.
+#
+# Адрес сайта задаёт WEB_SITE (docker-compose подставляет туда APP_DOMAIN):
+#   tracker.example.com — Caddy сам получает сертификат Let's Encrypt;
+#   localhost           — сертификат локального CA, браузер предупредит;
+#   :80                 — только http, без сертификата. Этот вариант нужен,
+#                         когда снаружи стоит свой nginx (или туннель) и TLS
+#                         заканчивается на нём; тогда контейнер слушает
+#                         только 127.0.0.1 и наружу не смотрит.
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$WEB_SITE:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=()"
+		Content-Security-Policy "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'"
+		-Server
+	}
+
+	# ── API ──
+	handle /graphql* {
+		reverse_proxy api:4000
+	}
+	handle /healthz {
+		reverse_proxy api:4000
+	}
+
+	# ── Статика приложения ──
+	handle {
+		root * /srv
+
+		# файлы сборки с хэшем в имени кэшируем надолго
+		@immutable path /assets/*
+		header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+		# оболочку и service worker — всегда перепроверять
+		@revalidate path / /index.html /sw.js /manifest.webmanifest
+		header @revalidate Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+}

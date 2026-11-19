@@ -3,8 +3,8 @@
   import type { FieldType, Tracker, TrackerField } from '../../lib/types';
   import { data, add, find, removeTracker, categoriesOf } from '../../lib/store.svelte';
   import { go, ask, toast, replaceRoute } from '../../lib/nav.svelte';
-  import { uid, SWATCHES, nowLocal, clone } from '../../lib/utils';
-  import { FIELD_TYPES, TRACKER_PRESETS, EMOJI_SUGGEST, type TrackerPreset } from '../../data/defaults';
+  import { uid, SWATCHES, nowLocal, clone, fmtMinutes, money } from '../../lib/utils';
+  import { FIELD_TYPES, TRACKER_PRESET_GROUPS, EMOJI_SUGGEST, type TrackerPreset } from '../../data/defaults';
   import TopBar from '../../components/TopBar.svelte';
   import Icon from '../../components/Icon.svelte';
   import Seg from '../../components/Seg.svelte';
@@ -29,6 +29,17 @@
   const goalUnit = $derived(!gf ? 'записей' : gf.type === 'duration' ? 'минут' : gf.type === 'money' ? '' : gf.unit || '');
   const valid = $derived(name.trim().length > 0 && fields.length > 0 && fields.every((f) => f.label.trim()));
   const entriesCount = $derived(existing ? data.entries.filter((e) => e.trackerId === existing.id).length : 0);
+
+  /** «цель 2 л», «не больше 2 ч» — чтобы заготовка с целью была видна сразу */
+  function goalHint(p: TrackerPreset): string {
+    if (!p.goal) return '';
+    const f = p.fields.find((x) => x.type === 'number' || x.type === 'money' || x.type === 'duration');
+    const prefix = p.goalMode === 'max' ? 'не больше ' : 'цель ';
+    if (!f) return prefix + p.goal + ' раз в день';
+    if (f.type === 'duration') return prefix + fmtMinutes(p.goal);
+    if (f.type === 'money') return prefix + money(p.goal);
+    return prefix + p.goal + (f.unit ? ' ' + f.unit : '');
+  }
 
   function applyPreset(p: TrackerPreset) {
     name = p.name === 'Свой трекер' ? '' : p.name;
@@ -108,15 +119,21 @@
 <div class="page">
   {#if step === 'preset'}
     <p class="hint">Выберите заготовку — потом всё можно поменять. Или начните с пустого.</p>
-    <div class="grid2">
-      {#each TRACKER_PRESETS as p (p.name)}
-        <button class="card tight preset" style:--c={p.color} onclick={() => applyPreset(p)}>
-          <span class="pi">{p.icon}</span>
-          <span class="bold">{p.name}</span>
-          <span class="small muted">{p.fields.map((f) => f.label).join(', ')}</span>
-        </button>
-      {/each}
-    </div>
+    {#each TRACKER_PRESET_GROUPS as g (g.name)}
+      <div class="section">
+        <div class="section-head"><h3>{g.name}</h3></div>
+        <div class="grid2">
+          {#each g.items as p (p.name)}
+            <button class="card tight preset" style:--c={p.color} onclick={() => applyPreset(p)}>
+              <span class="pi">{p.icon}</span>
+              <span class="bold">{p.name}</span>
+              <span class="small muted">{p.fields.map((f) => f.label).join(', ')}</span>
+              {#if p.goal}<span class="tiny faint">{goalHint(p)}</span>{/if}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/each}
   {:else}
     <div class="card vstack gap12">
       <div class="hstack">

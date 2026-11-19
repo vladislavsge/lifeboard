@@ -1,7 +1,7 @@
 // Простой service worker: приложение работает офлайн после первого открытия.
 // Файлы сборки имеют хэши в имени, поэтому их можно кэшировать «навсегда»,
 // а index.html берём из сети (если есть) — так обновления подтягиваются сами.
-const CACHE = 'lifeboard-v1';
+const CACHE = 'lifeboard-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png'];
 
 self.addEventListener('install', (e) => {
@@ -19,7 +19,10 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // запросы к серверу аккаунтов мимо кэша — ответы зависят от сессии
+  if (url.pathname.endsWith('/graphql') || url.pathname.endsWith('/healthz')) return;
 
   if (req.mode === 'navigate') {
     e.respondWith(
@@ -46,5 +49,44 @@ self.addEventListener('fetch', (e) => {
           return res;
         }),
     ),
+  );
+});
+
+/* ---------- Уведомления ---------- */
+
+self.addEventListener('push', (e) => {
+  const d = { title: 'Трекер', body: '', url: '/', tag: 'lifeboard' };
+  try {
+    Object.assign(d, e.data ? e.data.json() : {});
+  } catch {
+    if (e.data) d.body = e.data.text();
+  }
+  e.waitUntil(
+    self.registration.showNotification(d.title, {
+      body: d.body,
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      tag: d.tag || 'lifeboard',
+      data: { url: d.url || '/' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const path = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const w of windows) {
+        if (w.url.startsWith(self.registration.scope)) {
+          await w.focus();
+          // приложение на hash-роутере, поэтому путь передаём сообщением
+          w.postMessage({ type: 'navigate', path });
+          return;
+        }
+      }
+      await self.clients.openWindow('./#' + path);
+    })(),
   );
 });

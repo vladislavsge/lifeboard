@@ -1,0 +1,250 @@
+// Схема базы. Сервер не знает модель трекера: данные приложения лежат
+// в SyncCollection как JSON по коллекциям, с номером ревизии.
+//
+// В базу попадают только хэши: токен сессии, коды восстановления,
+// инвайт-коды и email-токены нельзя восстановить из дампа.
+
+generator client {
+  provider      = "prisma-client-js"
+  // musl — для alpine-образа, native — для разработки на хосте
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum EmailTokenKind {
+  verify
+  reset
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique @db.VarChar(190)
+  emailVerifiedAt DateTime?
+  passwordHash    String    @db.VarChar(255)
+  role            Role      @default(user)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  disabledAt      DateTime?
+
+  sessions       Session[]
+  totp           TotpSecret?
+  recoveryCodes  RecoveryCode[]
+  passkeys       Passkey[]
+  emailTokens    EmailToken[]
+  collections    SyncCollection[]
+  revisions      SyncRevision[]
+  invitesCreated Invite[]            @relation("InviteCreator")
+  auditLogs      AuditLog[]
+  challenges     WebauthnChallenge[]
+  pushSubs       PushSubscription[]
+  reminders      Reminder[]
+}
+
+/// Сессия = непрозрачный токен в cookie. В базе только его sha256.
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique @db.Char(64)
+  /// null — второй фактор ещё не пройден, доступа к данным нет
+  mfaPassedAt DateTime?
+  deviceLabel String?   @db.VarChar(120)
+  ip          String?   @db.VarChar(45)
+  userAgent   String?   @db.VarChar(400)
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Секрет TOTP шифруется AES-256-GCM ключом ENCRYPTION_KEY.
+model TotpSecret {
+  userId      String    @id
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secretEnc   String    @db.VarChar(255)
+  confirmedAt DateTime?
+  /// последний использованный шаг времени — защита от повторного ввода кода
+  lastStep    BigInt?
+  createdAt   DateTime  @default(now())
+}
+
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @db.VarChar(255)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Passkey {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique @db.VarChar(255)
+  publicKey    Bytes
+  counter      BigInt    @default(0)
+  transports   String?   @db.VarChar(120)
+  deviceType   String?   @db.VarChar(32)
+  backedUp     Boolean   @default(false)
+  label        String?   @db.VarChar(80)
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  codeHash    String    @unique @db.Char(64)
+  createdById String?
+  createdBy   User?     @relation("InviteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  maxUses     Int       @default(1)
+  usedCount   Int       @default(0)
+  note        String?   @db.VarChar(200)
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdById])
+}
+
+model EmailToken {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      EmailTokenKind
+  tokenHash String         @unique @db.Char(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime       @default(now())
+
+  @@index([userId, kind])
+}
+
+/// Журнал попыток входа — для блокировки перебора.
+model LoginAttempt {
+  id       BigInt   @id @default(autoincrement())
+  emailKey String   @db.VarChar(190)
+  ip       String?  @db.VarChar(45)
+  ok       Boolean
+  at       DateTime @default(now())
+
+  @@index([emailKey, at])
+  @@index([ip, at])
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  event     String   @db.VarChar(60)
+  ip        String?  @db.VarChar(45)
+  userAgent String?  @db.VarChar(400)
+  meta      Json?
+  at        DateTime @default(now())
+
+  @@index([userId, at])
+  @@index([event, at])
+}
+
+/// Подписка браузера на push. Одно устройство — одна подписка.
+model PushSubscription {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// адрес, выданный сервисом Apple или Google
+  endpoint    String    @unique @db.VarChar(500)
+  p256dh      String    @db.VarChar(255)
+  auth        String    @db.VarChar(255)
+  deviceLabel String?   @db.VarChar(120)
+  /// подряд неудачных отправок — после нескольких подписку удаляем
+  failures    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  lastSentAt  DateTime?
+
+  @@index([userId])
+}
+
+/// Напоминание, рассчитанное клиентом: сервер не знает модель трекера,
+/// поэтому время (уже в UTC) и текст приходят готовыми, а он только доставляет.
+model Reminder {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// стабильный ключ вида goal:<trackerId>:<дата> — защита от дублей
+  key       String    @db.VarChar(160)
+  kind      String    @db.VarChar(24)
+  title     String    @db.VarChar(120)
+  body      String    @db.VarChar(300)
+  /// маршрут внутри приложения, куда открыть по нажатию
+  url       String?   @db.VarChar(200)
+  sendAt    DateTime
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, key])
+  @@index([sendAt, sentAt])
+}
+
+/// Одноразовый challenge для passkey. Клиент получает handle в ответе
+/// и возвращает его при проверке — так challenge нельзя переиспользовать.
+model WebauthnChallenge {
+  id        String   @id @default(cuid())
+  handle    String   @unique @db.Char(43)
+  /// при регистрации — чей ключ; при входе — null, пока не проверили
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge String   @db.VarChar(255)
+  purpose   String   @db.VarChar(20)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Текущее состояние коллекции приложения (transactions, workouts, settings …).
+model SyncCollection {
+  id        BigInt   @id @default(autoincrement())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(40)
+  rev       Int      @default(1)
+  checksum  String   @db.Char(64)
+  payload   Json
+  bytes     Int
+  deviceId  String?  @db.VarChar(40)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+}
+
+/// Прошлые ревизии — страховка при перезаписи в конфликте. Храним последние 20.
+model SyncRevision {
+  id        BigInt   @id @default(autoincrement())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(40)
+  rev       Int
+  checksum  String   @db.Char(64)
+  payload   Json
+  deviceId  String?  @db.VarChar(40)
+  createdAt DateTime @default(now())
+
+  @@index([userId, name, rev])
+}

@@ -1,0 +1,59 @@
+# База: MySQL + GraphQL-сервер. Фронт описан в dev/prod-оверрайдах,
+# потому что в dev это vite-сервер, а в prod — собранная статика за Caddy.
+#
+#   dev:   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   prod:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# или короче: npm run docker:dev / npm run docker:prod
+name: lifeboard
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-lifeboard}
+      MYSQL_USER: ${MYSQL_USER:-lifeboard}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?задайте MYSQL_PASSWORD в .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?задайте MYSQL_ROOT_PASSWORD в .env}
+    volumes:
+      # именованный volume — данные переживают пересоздание контейнера
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  api:
+    build:
+      context: ./server
+      target: runtime
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-lifeboard}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-lifeboard}
+      API_PORT: ${API_PORT:-4000}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?задайте ENCRYPTION_KEY в .env (openssl rand -hex 32)}
+      AUTH_OPEN_REGISTRATION: ${AUTH_OPEN_REGISTRATION:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:'+(process.env.API_PORT||4000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  mysql-data:

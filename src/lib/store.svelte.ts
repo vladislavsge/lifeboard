@@ -38,7 +38,7 @@ const ARRAY_KEYS: ArrKey[] = [
   'smokes', 'groceryItems', 'groceryTrips', 'doctors', 'appointments', 'trackers', 'entries',
   'budgets', 'recurring',
 ];
-const KEYS: (keyof Data)[] = ['settings', ...ARRAY_KEYS];
+export const KEYS: (keyof Data)[] = ['settings', ...ARRAY_KEYS];
 
 export const BUILTIN_MODULE_IDS = ['finance', 'workouts', 'smoking', 'groceries', 'health'];
 
@@ -101,6 +101,8 @@ function migrate() {
   for (const k of ARRAY_KEYS) if (!Array.isArray(data[k])) (data as unknown as Record<string, unknown>)[k] = [];
   if (!data.accounts.length) data.accounts = clone(DEFAULT_ACCOUNTS);
   if (!data.categories.length) data.categories = clone(DEFAULT_CATEGORIES);
+  // уведомления появились позже: добираем недостающие поля, не сбрасывая выбор
+  s.notify = { goals: true, recurring: true, budgets: true, events: true, goalAt: '20:00', ...s.notify };
 
   // модули: встроенные + свои трекеры, без мусора
   const known = new Set([...BUILTIN_MODULE_IDS, ...data.trackers.map((t) => 'tracker:' + t.id)]);
@@ -112,6 +114,24 @@ function migrate() {
 
 const pending = new Map<string, unknown>();
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
+let changed: ((k: keyof Data) => void) | undefined;
+
+/** Синхронизация подписывается сюда, чтобы узнавать об изменениях коллекций. */
+export function onCollectionChange(fn: (k: keyof Data) => void) {
+  changed = fn;
+}
+
+/** Снимок коллекции — для подсчёта контрольной суммы и отправки на сервер. */
+export const snapshotOf = (k: keyof Data): unknown => $state.snapshot(data[k]);
+
+/** Данные, пришедшие с сервера. После замены прогоняем миграции. */
+export function applyRemote(patch: Record<string, unknown>) {
+  for (const [k, v] of Object.entries(patch)) {
+    if (!KEYS.includes(k as keyof Data) || v === undefined || v === null) continue;
+    (data as unknown as Record<string, unknown>)[k] = v;
+  }
+  migrate();
+}
 
 function flush() {
   clearTimeout(flushTimer);
@@ -125,6 +145,7 @@ function startPersistence() {
       $effect(() => {
         const snap = $state.snapshot(data[k]);
         pending.set(k, snap);
+        changed?.(k);
         clearTimeout(flushTimer);
         flushTimer = setTimeout(flush, 300);
       });
